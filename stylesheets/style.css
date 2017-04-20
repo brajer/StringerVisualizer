@@ -6,6 +6,10 @@ html, body {
   padding: 0;
 }
 
+h3 {
+  display: inline-block;
+}
+
 #page-wrapper {
 	padding-top: 50px;
 }
@@ -20,4 +24,18 @@ html, body {
 
 #controller-container {
   float: left;
+  font-size: 18px;
+}
+
+.sign {
+  max-width: 25px;
+  max-height: 25px;
+  width: auto;
+  height: auto;
+  cursor: pointer;
+}
+
+.flow {
+  display: inline-block;
+  padding: 5px;
 }

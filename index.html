@@ -42,12 +42,15 @@
     <div id="graph-container">
     </div>
     <div id="controller-container" class="container-fluid">
-      <h1>Round Rubin</h1><br />
+      <h1>Round Rubin Heuristics</h1><br />
       <p id="vnfs"><strong>VNF types</strong>: </p>
       <p id="sfcs"><strong>SFCs</strong>: <br /></p>
       <br />
       <button type="button" class="btn btn-success" id="start-rr">Start</button>
       <button type="button" class="btn btn-default" id="restart-rr">Restart</button>
+      <br /><br />
+      <div id="flow-controllers">
+      </div>
     </div>
   </div>
 
@@ -57,7 +60,10 @@
 
     (($, sigma) => {
 
-      let currentLoadLimit = 1 /* Scale: [1..n] */
+      let maxLoadLimit = 3
+
+      let torNo = 4
+      let serverNo = 16
 
       /* Sigma.js graph renderer */
 
@@ -77,9 +83,11 @@
 
       /* VNFs */
       let vnfArray = []
+      let vnfLimits = {}
       let vnfTypeNo = 5
       for(i = 0; i < vnfTypeNo; i++) {
         vnfArray[i] = "vnf"+(i+1)
+        vnfLimits[vnfArray[i]] = 1
       }
 
       /* SFCs */
@@ -89,27 +97,22 @@
         "sfc3": [ vnfArray[4], vnfArray[0], vnfArray[2], vnfArray[4] ]
       }
 
-      $("#vnfs").append(vnfArray.toString())
+      $("#vnfs").append("[" + vnfArray.toString() + "]")
       //$("#sfcs").append(sfcs.toString())
       for (let key in sfcs) {
-        $("#sfcs").append(key + ": " + sfcs[key].toString() + " <br />")
+        $("#sfcs").append(key + ": " + "[" + sfcs[key].toString() + "] <br />")
       }
 
       /* TORs and Servers */
 
       let servers = []
-      let serverNo = 16
-      let maxServerLoad = 3
-
       let tors = []
-      let torNo = 4
-
       for (i = 0; i < torNo; i++) {
         let id = "tor_"+(i+1)
         tors[i] = {
           id: id,
           servers: [],
-          initialized: false
+          sfcOrigin: ""
         }
       }
 
@@ -131,27 +134,38 @@
 
       //sigInst.refresh()
 
+      let initializeFlowControllers = () => {
+
+        for (let sfcKey in sfcs) {
+          $("#flow-controllers").append('<div>')
+          $("#flow-controllers").append('<h3>' + sfcKey + ": </h3>")
+          $("#flow-controllers").append('<div id="'+sfcKey+'" class="flow">0</div>')
+          $("#flow-controllers").append('<img class="sign sign-plus" data-sfcid="'+sfcKey+'" src="images/plus.png" />')
+          $("#flow-controllers").append('</div>')
+        }
+
+      }
+
       $("#start-rr").on("click", () => {
 
         for (let sfcKey in sfcs) {
           for (i = 0; i < tors.length; i++) {
             let tor = tors[i]
 
-            if (tor.initialized) {
+            if (tor.sfcOrigin != "") {
               continue
             }
-            tor.initialized = true
+            tor.sfcOrigin = sfcKey
             sfcs[sfcKey].forEach((vnfTypeInstance) => {
-              console.log("...In " + sfcKey + " assigning " + vnfTypeInstance)
-
               for (j = 0; j < tor.servers.length; j++) {
                 let server = tor.servers[j]
                 if (server.vnf != "" && server.vnf != vnfTypeInstance) {
                   continue
                 }
-                console.log("Assigning " + vnfTypeInstance + " to " + server.id)
                 server.vnf = vnfTypeInstance
-                server.sigmaRef.label = vnfTypeInstance
+
+                let label = vnfTypeInstance + " (" + 0 + "/" + maxLoadLimit + ")"
+                server.sigmaRef.label = label
 
                 break
               }
@@ -162,6 +176,24 @@
         sigInst.refresh()
 
         $("#start-rr").prop('disabled', true)
+
+        // Initialize Controllers
+        initializeFlowControllers()
+
+        $(".sign-plus").on("click", function() {
+            let sfcId = $(this).data("sfcid")
+            console.log(sfcs[sfcId])
+
+            /* ADD VNFs to mapped TOR */
+
+            /* IF VNF FOUND AND FREE CAPACITY/SERVER -> INCREASE/ASSIGN */
+
+            /* IF NO CAPACITY IN TOR -> SEARCH NEXT TORs ITERATIVELY */
+
+            /* IF NO CAPACITY IN ANY NODES WITH VNF TYPE -> INCREASE CAPACITY LIMIT FOR VNF */
+
+            /* IF HIT CAPACITY LIMIT -> DISABLE + FOR THIS SC */
+        })
       })
 
       $("#restart-rr").on("click", () => {
