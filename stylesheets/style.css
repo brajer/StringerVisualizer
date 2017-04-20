@@ -1,0 +1,23 @@
+@charset "UTF-8";
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#page-wrapper {
+	padding-top: 50px;
+}
+
+#graph-container {
+	width: 800px;
+	height: 800px;
+  border: 1px solid black;
+	/*margin: auto;*/
+  float: left;
+}
+
+#controller-container {
+  float: left;
+}

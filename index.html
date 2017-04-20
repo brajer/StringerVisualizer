@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Stringer - Load balancing</title>
+
+  <link rel="stylesheet" href="stylesheets/style.css">
+  <link rel="stylesheet" href="stylesheets/bootstrap.min.css">
+  <link rel="stylesheet" href="stylesheets/bootstrap-theme.min.css">
+
+  <script src="javascripts/jquery-3.2.0.min.js"></script>
+  <script src="javascripts/bootstrap.min.js"></script>
+
+</head>
+
+<body>
+
+  <nav class="navbar navbar-inverse navbar-fixed-top">
+    <div class="container">
+      <div class="navbar-header">
+        <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+          <span class="sr-only">Toggle navigation</span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href="#">Stringer Visualizer App</a>
+      </div>
+      <div id="navbar" class="collapse navbar-collapse">
+        <ul class="nav navbar-nav">
+          <li class="active"><a href="#">Round Rubin</a></li>
+          <li><a href="#">MIP</a></li>
+        </ul>
+      </div><!--/.nav-collapse -->
+    </div>
+  </nav>
+
+  <div id="page-wrapper" class="container-fluid">
+    <div id="graph-container">
+    </div>
+    <div id="controller-container" class="container-fluid">
+      <h1>Round Rubin</h1><br />
+      <p id="vnfs"><strong>VNF types</strong>: </p>
+      <p id="sfcs"><strong>SFCs</strong>: <br /></p>
+      <br />
+      <button type="button" class="btn btn-success" id="start-rr">Start</button>
+      <button type="button" class="btn btn-default" id="restart-rr">Restart</button>
+    </div>
+  </div>
+
+  <script src="javascripts/sigma.min.js"></script>
+  <script src="javascripts/fatTree.js"></script>
+  <script>
+
+    (($, sigma) => {
+
+      let currentLoadLimit = 1 /* Scale: [1..n] */
+
+      /* Sigma.js graph renderer */
+
+      let sigInst = new sigma({
+          id: "fatTreeGraph",
+          graph: fatTreeData,
+          container: document.getElementById('graph-container'),
+          settings: {
+            labelThreshold: 0
+          }
+      })
+
+      // sigInst.graph.nodes().forEach(function(node) {
+      //   console.log(node);
+      //   //node.color = "#FF0000"
+      // })
+
+      /* VNFs */
+      let vnfArray = []
+      let vnfTypeNo = 5
+      for(i = 0; i < vnfTypeNo; i++) {
+        vnfArray[i] = "vnf"+(i+1)
+      }
+
+      /* SFCs */
+      let sfcs = {
+        "sfc1": [ vnfArray[0], vnfArray[1], vnfArray[0] ],
+        "sfc2": [ vnfArray[2], vnfArray[4], vnfArray[3] ],
+        "sfc3": [ vnfArray[4], vnfArray[0], vnfArray[2], vnfArray[4] ]
+      }
+
+      $("#vnfs").append(vnfArray.toString())
+      //$("#sfcs").append(sfcs.toString())
+      for (let key in sfcs) {
+        $("#sfcs").append(key + ": " + sfcs[key].toString() + " <br />")
+      }
+
+      /* TORs and Servers */
+
+      let servers = []
+      let serverNo = 16
+      let maxServerLoad = 3
+
+      let tors = []
+      let torNo = 4
+
+      for (i = 0; i < torNo; i++) {
+        let id = "tor_"+(i+1)
+        tors[i] = {
+          id: id,
+          servers: [],
+          initialized: false
+        }
+      }
+
+      for (i = 0; i < serverNo; i++) {
+        let id = "server_"+(i+1)
+        let group = Math.floor(i/torNo)
+        let server = servers[i] = {
+          id: id,
+          vnf: "",
+          load: 0,
+          tor: "tor_"+(group+1),
+          sigmaRef: sigInst.graph.nodes(id)
+        }
+        tors[group].servers.push(server)
+      }
+
+      //console.log(servers)
+      //console.log(tors)
+
+      //sigInst.refresh()
+
+      $("#start-rr").on("click", () => {
+
+        for (let sfcKey in sfcs) {
+          for (i = 0; i < tors.length; i++) {
+            let tor = tors[i]
+
+            if (tor.initialized) {
+              continue
+            }
+            tor.initialized = true
+            sfcs[sfcKey].forEach((vnfTypeInstance) => {
+              console.log("...In " + sfcKey + " assigning " + vnfTypeInstance)
+
+              for (j = 0; j < tor.servers.length; j++) {
+                let server = tor.servers[j]
+                if (server.vnf != "" && server.vnf != vnfTypeInstance) {
+                  continue
+                }
+                console.log("Assigning " + vnfTypeInstance + " to " + server.id)
+                server.vnf = vnfTypeInstance
+                server.sigmaRef.label = vnfTypeInstance
+
+                break
+              }
+            })
+            break
+          }
+        }
+        sigInst.refresh()
+
+        $("#start-rr").prop('disabled', true)
+      })
+
+      $("#restart-rr").on("click", () => {
+        location.reload()
+      })
+
+  })(jQuery, sigma)
+
+  </script>
+
+</body>
