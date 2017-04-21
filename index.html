@@ -264,6 +264,8 @@
               if (torIterator == tor.index) {
                 increaseVnfFlowLimit(overflowingVnfs)
                 sigInst.refresh()
+                addVnfsToTor(overflowingVnfs, tor)
+                sigInst.refresh()
 
                 break
               }
