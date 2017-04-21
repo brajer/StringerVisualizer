@@ -60,8 +60,6 @@
 
     (($, sigma) => {
 
-      let maxLoadLimit = 3
-
       let torNo = 4
       let serverNo = 16
 
@@ -75,11 +73,6 @@
             labelThreshold: 0
           }
       })
-
-      // sigInst.graph.nodes().forEach(function(node) {
-      //   console.log(node);
-      //   //node.color = "#FF0000"
-      // })
 
       /* VNFs */
       let vnfArray = []
@@ -112,7 +105,8 @@
         tors[i] = {
           id: id,
           servers: [],
-          sfcOrigin: ""
+          sfc: "",
+          index: i
         }
       }
 
@@ -124,47 +118,97 @@
           vnf: "",
           load: 0,
           tor: "tor_"+(group+1),
-          sigmaRef: sigInst.graph.nodes(id)
+          sigmaRef: sigInst.graph.nodes(id),
+          index: i
         }
         tors[group].servers.push(server)
       }
 
-      //console.log(servers)
-      //console.log(tors)
+      /* ROUND RUBIN */
+      let addVnfsToTor = (vnfArray, tor) => {
+        let overflowingVnfs = []
 
-      //sigInst.refresh()
+        for (i = 0; i < vnfArray.length; i++) {
+          let vnf = vnfArray[i] // "vnf1", "vnf2", ..., "vnfn"
+          let foundPlaceInTor = false
+          for (j = 0; j < tor.servers.length; j++) {
+              let server = tor.servers[j]
+              if (server.vnf == vnf && server.load < vnfLimits[vnf]) {
+                server.load++
+                foundPlaceInTor = true
 
-      let initializeFlowControllers = () => {
+                let label = vnf + " (" + server.load + "/" + vnfLimits[vnf] + ")"
+                server.sigmaRef.label = label
+                if (server.load == vnfLimits[vnf]) {
+                  server.sigmaRef.color = "#FF0000"
+                }
 
-        for (let sfcKey in sfcs) {
-          $("#flow-controllers").append('<div>')
-          $("#flow-controllers").append('<h3>' + sfcKey + ": </h3>")
-          $("#flow-controllers").append('<div id="'+sfcKey+'" class="flow">0</div>')
-          $("#flow-controllers").append('<img class="sign sign-plus" data-sfcid="'+sfcKey+'" src="images/plus.png" />')
-          $("#flow-controllers").append('</div>')
+                break
+              }
+              if (server.vnf == "") {
+                server.vnf  = vnf
+                server.load = 1
+                foundPlaceInTor = true
+
+                let label = vnf + " (" + server.load + "/" + vnfLimits[vnf] + ")"
+                server.sigmaRef.label = label
+
+                if (server.load == vnfLimits[vnf]) {
+                  server.sigmaRef.color = "#FF0000"
+                }
+
+                break
+              }
+          }
+          if (!foundPlaceInTor) {
+            overflowingVnfs.push(vnf)
+          }
         }
-
+        return overflowingVnfs
       }
 
-      $("#start-rr").on("click", () => {
+      let increaseVnfFlowLimit = (vnfArray) => {
+          vnfArray.forEach((vnf) => {
+            ++vnfLimits[vnf]
+            servers.forEach((server) => {
+              if (server.vnf == vnf) {
+                let label = vnf + " (" + server.load + "/" + vnfLimits[vnf] + ")"
+                server.sigmaRef.label = label
+                server.sigmaRef.color = "#000000"
+              }
+            })
+          })
+      }
+
+      let getTorMappedToSfc = (sfcId) => {
+        for (i = 0; i < tors.length; i++) {
+          if (tors[i].sfc == sfcId) {
+            return tors[i]
+          }
+        }
+      }
+
+      /* Frontend Interaction */
+
+      let initialSfcDistribution = () => {
 
         for (let sfcKey in sfcs) {
           for (i = 0; i < tors.length; i++) {
             let tor = tors[i]
 
-            if (tor.sfcOrigin != "") {
+            if (tor.sfc != "") {
               continue
             }
-            tor.sfcOrigin = sfcKey
-            sfcs[sfcKey].forEach((vnfTypeInstance) => {
+            tor.sfc = sfcKey
+            sfcs[sfcKey].forEach((vnf) => {
               for (j = 0; j < tor.servers.length; j++) {
                 let server = tor.servers[j]
-                if (server.vnf != "" && server.vnf != vnfTypeInstance) {
+                if (server.vnf != "" && server.vnf != vnf) {
                   continue
                 }
-                server.vnf = vnfTypeInstance
+                server.vnf = vnf
 
-                let label = vnfTypeInstance + " (" + 0 + "/" + maxLoadLimit + ")"
+                let label = vnf + " (" + server.load + "/" + vnfLimits[vnf] + ")"
                 server.sigmaRef.label = label
 
                 break
@@ -173,6 +217,24 @@
             break
           }
         }
+
+      }
+
+      let initializeFlowControllers = () => {
+
+        for (let sfcId in sfcs) {
+          $("#flow-controllers").append('<div>')
+          $("#flow-controllers").append('<h3>' + sfcId + ": </h3>")
+          $("#flow-controllers").append('<div id="'+sfcId+'-counter" class="flow">0</div>')
+          $("#flow-controllers").append('<img class="sign sign-plus" data-sfcid="'+sfcId+'" src="images/plus.png" />')
+          $("#flow-controllers").append('</div>')
+        }
+
+      }
+
+      $("#start-rr").on("click", () => {
+        initialSfcDistribution()
+
         sigInst.refresh()
 
         $("#start-rr").prop('disabled', true)
@@ -180,20 +242,37 @@
         // Initialize Controllers
         initializeFlowControllers()
 
+
+
         $(".sign-plus").on("click", function() {
             let sfcId = $(this).data("sfcid")
-            console.log(sfcs[sfcId])
+            let sfcCounter = $("#"+sfcId+"-counter").text()
+            $("#"+sfcId+"-counter").html(++sfcCounter)
 
             /* ADD VNFs to mapped TOR */
+            let tor = getTorMappedToSfc(sfcId)
+            let overflowingVnfs = addVnfsToTor(sfcs[sfcId], tor)
+            sigInst.refresh()
 
-            /* IF VNF FOUND AND FREE CAPACITY/SERVER -> INCREASE/ASSIGN */
+            let torIterator = tor.index
+            while (overflowingVnfs.length > 0) {
+              if (torIterator == (tors.length-1)) {
+                torIterator = 0
+              } else {
+                ++torIterator
+              }
+              if (torIterator == tor.index) {
+                increaseVnfFlowLimit(overflowingVnfs)
+                sigInst.refresh()
 
-            /* IF NO CAPACITY IN TOR -> SEARCH NEXT TORs ITERATIVELY */
+                break
+              }
 
-            /* IF NO CAPACITY IN ANY NODES WITH VNF TYPE -> INCREASE CAPACITY LIMIT FOR VNF */
-
-            /* IF HIT CAPACITY LIMIT -> DISABLE + FOR THIS SC */
+              overflowingVnfs = addVnfsToTor(overflowingVnfs, tors[torIterator])
+              sigInst.refresh()
+            }
         })
+
       })
 
       $("#restart-rr").on("click", () => {
